@@ -50,10 +50,23 @@ syscal_fmt = {'id':str_fmt,'Ax':float_fmt,'Bx':float_fmt,
               'Channel':float_fmt,'Bat':float_fmt,'Rx-Bat':float_fmt,
               'Temp.':float_fmt,'Date':str_fmt,'Gapfiller':float_fmt}
 
+#--------------------------------------------------------
+# Lippmann
+lipp_cols = ['id','A','B','M','N','I','U',
+             'dU','U90','dU90','rho','phi',
+             'f','n','nAB','Profile','Spread','PseudoZ',
+             'X','Y','Z','date','time','U(Tx)']
+lipp_fmt = {'id':int_fmt,'A':int_fmt,'B':int_fmt,'M':int_fmt,'N':int_fmt,'I':float_fmt,'U':float_fmt,
+             'dU':float_fmt,'U90':float_fmt,'dU90':float_fmt,'rho':float_fmt,'phi':float_fmt,
+             'f':float_fmt,'n':int_fmt,'nAB':int_fmt,'Profile':float_fmt,'Spread':float_fmt,'PseudoZ':float_fmt,
+             'X':float_fmt,'Y':float_fmt,'Z':float_fmt,'date':str_fmt,'time':str_fmt,'U(Tx)':float_fmt}
+
 all_fmt_dict = {'agi':{'fmt':stg_fmt_3d,'cols':stg_cols_3d,
                        'delimiter':',','nheader':3},
                 'syscal':{'fmt':syscal_fmt,'cols':syscal_cols,
-                          'delimiter':',','nheader':1}}
+                          'delimiter':',','nheader':1},
+                'lipp':{'fmt':lipp_fmt,'cols':lipp_cols,
+                        'delimiter':None,'nheader':269}}
 
 ################ Post-processing utilities ################
 def doi_oldenburg_li_func(res_array1=None,res_array2=None,
@@ -90,18 +103,18 @@ def doi_analysis(model_fnames=None, model_dirs=None, ref_res_array=None,
 ################# I/O utilities #####################################
 def load_fwd_output(fname='R2_forward.dat',work_dir=None,delimiter=' ',
                     nheader=1,ifile=0,app_res_bool=False):
-    '''Load R2 forward model output file.'''
+    '''Load R2 or R3 forward model output file.'''
     if fname is None:
         import glob
         fname = glob.glob(os.path.join(work_dir,'*.dat'))[ifile]
     elif os.path.dirname(fname) in ['']:
         fname=os.path.join(work_dir,fname)
     
-    with open(fname,'r') as trn_file:
+    with open(fname,'r') as i_file:
         header_info = []
         data_list = []
         irow = 0
-        for iline in trn_file:
+        for iline in i_file:
             if irow < nheader:
                 header_info.append(iline)
             else:
@@ -109,9 +122,12 @@ def load_fwd_output(fname='R2_forward.dat',work_dir=None,delimiter=' ',
             irow += 1
     data_out = np.array(data_list)
     
-    if not app_res_bool:
-        # Remove apparent resistivity column
+    # Remove apparent resistivity column
+    if not app_res_bool and 'R2' in fname:
         data_out = data_out[:,:6]
+    elif not app_res_bool and 'R3' in fname:
+        data_out = data_out[:,:10]
+    
     
     return data_out
 
@@ -160,13 +176,20 @@ def read_trn(work_dir=None,fname=None,
     return data_out
                            
 def load_er_data(fname=None,data_fmt=None, inf_electrode_xy = [None,None],
-                 string_nums=1,fmt_dict=None):
+                 string_nums=1,fmt_dict=None, nan_val=None):
     '''Load resistivity data.'''
     if fmt_dict is None:
         if data_fmt.lower() in ['agi']:
             fmt_dict = all_fmt_dict['agi']
+            dtype = 'agi'
         elif data_fmt.lower() in ['geotomo']:
             fmt_dict = all_fmt_dict['geotomo']
+            dtype = 'geotomo'
+        elif data_fmt.lower() in ['lipp','lippmann']:
+            fmt_dict = all_fmt_dict['lipp']
+            electrode_dict={}
+            nan_val = '-'
+            dtype = 'lipp'
     
     # Load data to an array
     with open(fname,'r') as er_file:
@@ -176,18 +199,39 @@ def load_er_data(fname=None,data_fmt=None, inf_electrode_xy = [None,None],
         for iline in er_file:
             if irow < fmt_dict['nheader']:
                 header_info.append(iline)
+                if dtype in ['lipp']:
+                    # Find electrode positions
+                    if 'Electrode [' in iline:
+                        temp_Edata = iline.split('=')
+                        pos_data = [float(itemp) for itemp in temp_Edata[1].split()]
+                        Enum = int(temp_Edata[0].split('[')[-1].split(']')[0])
+                        electrode_dict.update({Enum:pos_data})
             else:
                 data_list.append([ipiece.strip(' \t') for ipiece in iline.split(fmt_dict['delimiter'])])
             irow += 1
     
     # Convert data types to desired formats
     data_array = np.array(data_list)
+    if nan_val is not None:
+        data_array[data_array==nan_val] = np.nan
     data_dict = {}
     for icol,active_col in enumerate(fmt_dict['cols'][:len(data_list[0])]):
         data_dict.update({active_col:data_array[:,icol].astype(fmt_dict['fmt'][active_col])})
     
 
     position_keys = ['A','B','M','N']
+    
+    # For Lippmann data, need to create Ax to Ny
+    if dtype in ['lipp']:
+        for pos_key in position_keys:
+            temp_xyz = np.array([electrode_dict[d1] for d1 in data_dict[pos_key]])
+            data_dict['{}x'.format(pos_key)] = temp_xyz[:,0]
+            data_dict['{}y'.format(pos_key)] = temp_xyz[:,1]
+            data_dict['{}z'.format(pos_key)] = temp_xyz[:,2]
+        
+        # Need to also define resis (V/I)
+        data_dict['resis'] = data_dict['U']/data_dict['I']
+            
     inf_edict = {}
     if inf_electrode_xy[0] is not None: # find appearances of inf electrode
         all_x = []
@@ -235,8 +279,10 @@ def load_er_data(fname=None,data_fmt=None, inf_electrode_xy = [None,None],
             same_xy = (data_dict['{}x'.format(ikey)]==elect_row[1]) & (data_dict['{}y'.format(ikey)]==elect_row[2])
             data_dict[enum_key][same_xy] = int(elect_row[0]) 
         
-    if data_fmt.lower() in ['agi']:
+    if dtype in ['agi']:
         data_dict['resis_error']=data_dict['resis_error']/10./1e2 # convert from 10ths of percent to ratio
+    elif dtype in ['lipp']:
+        data_dict['resis_error'] = (data_dict['dU']/1e2)
         
     meas_nums = np.arange(data_dict['resis'].shape[0],dtype=int).reshape((-1,1))+1
     
@@ -305,6 +351,16 @@ def load_r2out(work_dir=None):
         for iline in r2:
             output_lines.append(iline.rstrip())
     return output_lines
+
+def write_res_dat(elem_array=None,startingRfile=None,
+                          wdir=None):
+    if wdir is not None:
+        startingRfile = os.path.join(wdir,startingRfile)
+    
+    with open(startingRfile,'w') as fout:
+        for iline in elem_array:
+            fout.write('  {0:2.1f}  {1:2.1f}  {2:2.1f}   {3:10.2f}\n'.format(*iline))
+            
 ################ Conversion utilities ################### 
 
 def grid_inv_data(inv_data=None, nxny=[1e2,1e2],
@@ -416,7 +472,7 @@ def match_xy(XY=None, xy_to_match=None):
         if len(ifind)>0:
             xy_match_ind.append(ifind)
     
-    return np.array(xy_match_ind)
+    return np.array(xy_match_ind).astype(int)
     
 def extrap(x, xp, yp, method='linear'):
     """np.interp function with linear extrapolation"""

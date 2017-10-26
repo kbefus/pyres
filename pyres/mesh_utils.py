@@ -12,6 +12,229 @@ from pyres import pyres_utils
 # ----------------------- Mesh construction functions -----------------------
 
 
+def make_points(mesh_obj=None,clen=None,start_pts=1,ndim=2):
+    elec_list = []
+    iline_order = []
+    for iline in np.arange(mesh_obj.line_strexyz.shape[0]):    
+        if iline not in mesh_obj.points.keys():
+            mesh_obj.points[iline] = {}
+        iline_order.append(iline)
+        key_order = []
+        for linestr,enum,x,y,z in mesh_obj.line_strexyz[iline]:
+            mesh_obj.points[iline].update({start_pts:[x,y,z,clen]})
+            key_order.append(start_pts)
+            if ndim==2:
+                elec_list.append([enum,start_pts]) # save data for protocol.dat
+            elif ndim==3:
+                elec_list.append([linestr,enum,start_pts])
+            start_pts+=1
+            
+        mesh_obj.points[iline].update({'order':key_order})
+        
+    mesh_obj.points.update({'order':iline_order})    
+    mesh_obj.count_pts = start_pts        
+    mesh_obj.electrode_array = np.array(elec_list)
+
+def make_lines(mesh_obj,start_lines=1):
+        
+        mesh_obj.start_lines=start_lines
+        mesh_obj.lines = {}
+        mesh_obj.surveyline_startend = {}
+        mesh_obj.startpt,mesh_obj.endpt = [],[]
+        key_order_se = []
+        for ikey in mesh_obj.points['order']:
+            # Collect consecutive points into lines in reverse order
+            line_keys = mesh_obj.points[ikey]['order']
+            
+            # record start and end positions of line
+            mesh_obj.startpt.append(line_keys[0])
+            mesh_obj.endpt.append(line_keys[-1])
+            
+            # Save first line in section
+            mesh_obj.surveyline_startend[ikey] = [mesh_obj.start_lines]
+            key_order_se.append(ikey)
+            
+            key_order = []
+            for istart,iend in zip(line_keys[:-1],line_keys[1:]):
+                mesh_obj.lines.update({mesh_obj.start_lines:[istart,iend]})
+                key_order.append(mesh_obj.start_lines)
+                mesh_obj.start_lines+=1
+                
+            mesh_obj.lines.update({'order':key_order})
+            # Save last line in section
+            mesh_obj.surveyline_startend[ikey].append(mesh_obj.start_lines-1)
+        
+        mesh_obj.surveyline_startend.update({'order':key_order_se})
+        
+        # Connectors for the lines
+        if len(mesh_obj.startpt)>1:
+            for istart1,istart2 in zip(mesh_obj.startpt[:-1],mesh_obj.startpt[1:]):
+                mesh_obj.lines.update({mesh_obj.start_lines:[istart1,istart2]})
+                mesh_obj.lines['order'].append(mesh_obj.start_lines)
+                mesh_obj.start_lines+=1
+            
+            for end1,iend2 in zip(mesh_obj.endpt[:-1],mesh_obj.endpt[1:]):
+                mesh_obj.lines.update({mesh_obj.start_lines:[end1,iend2]})
+                mesh_obj.lines['order'].append(mesh_obj.start_lines)
+                mesh_obj.start_lines+=1    
+
+def make_boundaries(mesh_obj,nforeground=4,nbackground=4,ndim=None):
+        '''Make boundaries from survey bounds.
+        
+        
+        Can eventually add capability to define non-square boundaries
+        '''
+        mesh_obj.boundaries = {}
+        # First make foreground boundaries by extending some constant beyond
+        # the corner points
+        fore_corners = np.arange(mesh_obj.count_pts,mesh_obj.count_pts+nforeground)
+        mesh_obj.count_pts = mesh_obj.count_pts+nforeground
+        
+        fore_pairs = np.c_[fore_corners,np.roll(fore_corners,-1)]
+        
+        mesh_obj.boundaries['foreground'] = {}
+        key_order = []
+        
+        if ndim==2:
+            # Include lines connecting electrodes in foreground
+            mesh_obj.boundaries['foreground'].update(mesh_obj.lines.copy())
+            key_order.extend(mesh_obj.lines['order'])
+            
+            # Start foreground at end of line
+            mesh_obj.boundaries['foreground'].update({mesh_obj.start_lines:[mesh_obj.endpt[0],fore_pairs[-1,1]]})
+            key_order.append(mesh_obj.start_lines)
+            mesh_obj.start_lines += 1
+            nforeground = nforeground-1
+            
+        mesh_obj.fore_lines=[]
+        for ifore in np.arange(nforeground):
+            mesh_obj.boundaries['foreground'].update({mesh_obj.start_lines:
+                                                    fore_pairs[ifore,:].tolist()})
+            key_order.append(mesh_obj.start_lines)
+            mesh_obj.fore_lines.append(mesh_obj.start_lines)
+            mesh_obj.start_lines += 1
+        
+        if ndim == 2: 
+            # Complete foreground by connecting last foreground line to first electrode
+            mesh_obj.boundaries['foreground'].update({mesh_obj.start_lines:[fore_pairs[-1,0],mesh_obj.startpt[0]]})
+            key_order.append(mesh_obj.start_lines)
+            mesh_obj.start_lines += 1
+        
+        # Save foreground order to mesh object
+        mesh_obj.boundaries['foreground'].update({'order':key_order})
+        
+        # Background points and lines
+        back_corners = np.arange(mesh_obj.count_pts,mesh_obj.count_pts+nbackground)
+        mesh_obj.count_pts = mesh_obj.count_pts + nbackground
+        
+        back_pairs = np.c_[back_corners,np.roll(back_corners,-1)]
+        key_order = []
+        mesh_obj.boundaries['background'] = {}  
+        if ndim==2:
+            # Connect foreground to background
+            mesh_obj.boundaries['background'].update({mesh_obj.start_lines:[fore_pairs[0,0],back_pairs[0,0]]})
+            key_order.append(mesh_obj.start_lines)
+            mesh_obj.start_lines += 1
+            nbackground=nbackground-1
+            
+        for iback in np.arange(nbackground):
+            mesh_obj.boundaries['background'].update({mesh_obj.start_lines:
+                                                    back_pairs[iback,:].tolist()})
+            key_order.append(mesh_obj.start_lines)
+            mesh_obj.start_lines += 1
+        
+        if ndim==2:
+            # Connect last background line to foreground
+            mesh_obj.boundaries['background'].update({mesh_obj.start_lines:[back_pairs[-1,0],fore_pairs[-1,0]]})
+            key_order.append(mesh_obj.start_lines)
+            mesh_obj.start_lines += 1
+        
+        # Save background order to mesh object
+        mesh_obj.boundaries['background'].update({'order':key_order})
+        
+
+def make_surfaces(mesh_obj,ndim=None):
+    
+    mesh_obj.surfaces = {}   
+    seg_dict = {'nelectrodes':mesh_obj.nelectrodes_per_line,
+                'nlines':mesh_obj.nlines,
+                'topbot':True,
+                'iline':np.arange(2*(mesh_obj.nlines-1))}
+    mesh_obj.connecting_segs = segment_loc(**seg_dict).reshape((2,-1)).T
+
+    mesh_obj.surflines = {} # will have "Line Loop(#) = {}
+    key_order_sl = []
+    key_order_s = []
+    
+    if ndim == 3: # R3 surfaces
+        # Make foreground surfaces between individual lines
+        for iloop in np.arange(mesh_obj.nlines-1):
+            topbot_edges = mesh_obj.connecting_segs[iloop,:]
+            l1_startend = mesh_obj.surveyline_startend[iloop+1]
+            line1 = np.arange(l1_startend[0],l1_startend[1]+1,1)
+            l2_startend = mesh_obj.surveyline_startend[iloop]
+            line2 = np.arange(-l2_startend[1],-l2_startend[0]+1,1)
+            out_lines = np.hstack([topbot_edges[0],
+                                   line1,
+                                   -topbot_edges[1],
+                                   line2])
+            
+            mesh_obj.surflines.update({mesh_obj.start_lines:out_lines.tolist()})
+            key_order_sl.append(mesh_obj.start_lines)
+            mesh_obj.start_lines += 1
+            
+            mesh_obj.surfaces.update({mesh_obj.start_lines:[mesh_obj.start_lines-1]})
+            key_order_s.append(mesh_obj.start_lines)
+            mesh_obj.start_lines += 1
+
+        # Make bounding foreground surface from foreground lines and line-bounding lines
+        mesh_obj.surflines.update({mesh_obj.start_lines:np.roll(np.sort(list(mesh_obj.boundaries['foreground']['order'])),1).tolist()}) # foreground boundary
+        key_order_sl.append(mesh_obj.start_lines)
+        iforeground = mesh_obj.start_lines
+        mesh_obj.start_lines += 1
+        lastsurvey_lines = mesh_obj.surveyline_startend[mesh_obj.nlines-1]
+        firstsurvey_lines = mesh_obj.surveyline_startend[0]
+        survey_line_bounds = np.hstack([mesh_obj.connecting_segs[:,0].ravel(),
+                                        np.arange(lastsurvey_lines[0],lastsurvey_lines[-1]+1),
+                                        -mesh_obj.connecting_segs[::-1,1].ravel(),
+                                        np.arange(-firstsurvey_lines[-1],-firstsurvey_lines[0]+1)])
+        mesh_obj.surflines.update({mesh_obj.start_lines:np.roll(survey_line_bounds,-2).tolist()})# survey line boundary
+        key_order_sl.append(mesh_obj.start_lines)
+        mesh_obj.start_lines += 1
+        mesh_obj.surfaces.update({mesh_obj.start_lines:[mesh_obj.start_lines-1,mesh_obj.start_lines-2]})
+        key_order_s.append(mesh_obj.start_lines)
+        mesh_obj.start_lines += 1
+        
+        # Make background surface between foreground and background lines
+        mesh_obj.surflines.update({mesh_obj.start_lines:np.roll(np.sort(list(mesh_obj.boundaries['background']['order'])),1).tolist()}) # background line
+        key_order_sl.append(mesh_obj.start_lines)
+        mesh_obj.start_lines += 1
+        mesh_obj.surfaces.update({mesh_obj.start_lines:[iforeground,mesh_obj.start_lines-1]})
+        key_order_s.append(mesh_obj.start_lines)
+        
+    elif ndim==2:
+        # Make bounding foreground surface from foreground lines and line-bounding lines
+        mesh_obj.surflines.update({mesh_obj.start_lines:np.roll(mesh_obj.boundaries['foreground']['order'],1).tolist()}) # foreground boundary
+        key_order_sl.append(mesh_obj.start_lines)
+        mesh_obj.start_lines += 1
+        mesh_obj.surfaces.update({mesh_obj.start_lines:[mesh_obj.start_lines-1]})
+        key_order_s.append(mesh_obj.start_lines)
+        mesh_obj.start_lines += 1
+        
+        # Make background surface between foreground and background lines
+        foreline_order = -1*np.array(mesh_obj.fore_lines)[::-1]
+        background_order = np.hstack([foreline_order,mesh_obj.boundaries['background']['order']])
+        mesh_obj.surflines.update({mesh_obj.start_lines:background_order.tolist()}) # background line
+        key_order_sl.append(mesh_obj.start_lines)
+        mesh_obj.start_lines += 1
+        
+        mesh_obj.surfaces.update({mesh_obj.start_lines:[mesh_obj.start_lines-1]})
+        key_order_s.append(mesh_obj.start_lines)
+        
+    # Record order into mesh_obj
+    mesh_obj.surflines.update({'order':key_order_sl})
+    mesh_obj.surfaces.update({'order':key_order_s})
+
 def make_region(geom_dict=None, start_line_num=None,start_pt_num=None,
                   active_domain=None,boundary_dict=None,extend_to=None,
                   region_xyzpts=None,clen=None):
@@ -179,7 +402,7 @@ def make_region(geom_dict=None, start_line_num=None,start_pt_num=None,
     output_dict['region_dict'].update({'region_surfaces':region_surfaces})
 
     return output_dict,start_line_num,start_pt_num
-    
+
 def quad_mesh_region(mesh_xy=[None,None],target_xypos=None, target_res=None,
                      target_firstnrows=None,region_elem_list=None,background_res=None):
     """Define quadrilateral mesh region."""
@@ -253,8 +476,73 @@ def make_tri_region_elements(mesh_dict=None, target_zones=None,
             reg_elems.append([target_elements[0],target_elements[-1],temp_res]) # if elements are in order
             
     return reg_elems   
+
+def select_tet_region_nodes(mesh_dict=None,target_zones=None,
+                            main_res=None, target_res=None,buffer_size=0.,
+                            startingRfile=None):
+    
+    tet_elem_nodes = element_xyz(mesh_dict)
+    tet_elem_centroids = tet_elem_nodes.mean(axis=1)
+    
+    reg_elems = None
+    elem_array = None
+    
+    if not startingRfile:
+        # Make region element list
+        
+        reg_elems.append([1,len(mesh_dict['elements']),main_res]) # Background
+    else:
+        # Set all elements to background
+        elem_array = np.zeros([tet_elem_nodes.shape[0],4])
+        elem_array[:,3] = main_res
+        
+    for target_zone,temp_res in zip(target_zones,target_res):
+        # target zone has following shape for rectuangular prism
+        # target_zone = [[x_min,x_max],
+        #                [y_min,y_max],
+        #                [z_min,z_max]]
+        ifound = (tet_elem_centroids[:,0]+buffer_size >= target_zone[0][0]) &\
+                 (tet_elem_centroids[:,0]-buffer_size <= target_zone[0][1]) &\
+                 (tet_elem_centroids[:,1]+buffer_size >= target_zone[1][0]) &\
+                 (tet_elem_centroids[:,1]-buffer_size <= target_zone[1][1]) &\
+                 (tet_elem_centroids[:,2]+buffer_size >= target_zone[2][0]) &\
+                 (tet_elem_centroids[:,2]-buffer_size <= target_zone[2][1]) 
+        
+        if not startingRfile:
+            # Need to write continuous elements as a region...TBD
+            pass
+        else:
+            elem_array[ifound,3] = temp_res
+            
+    if elem_array is not None:
+        return elem_array
+    elif reg_elems is not None:
+        return reg_elems
         
 # ----------------------- Mesh helper functions -------------------------------
+def segment_loc(iline=None,nelectrodes=None,nlines=None,topbot=False):
+    if topbot:
+        return nlines*(nelectrodes-1) + iline + 1
+    else:
+        return iline*(nelectrodes-1)
+
+def element_xyz(mesh_dict=None):
+    '''Assign xyz coordinates to element nodes.'''
+    all_elements = np.array(mesh_dict['elements'])
+    all_element_nums = all_elements[:,:mesh_dict['npere']]
+    uniq_elements = np.unique(all_element_nums)
+    out_element_xyz = {}
+    for ielement in uniq_elements:
+        out_element_xyz.update({ielement:mesh_dict['nodes'][ielement-1]})
+    
+    out_xyz=[]
+    for element_row in all_element_nums:
+        element_xyz_temp = []
+        for element_in_row in element_row:
+            element_xyz_temp.append(out_element_xyz[element_in_row])
+        out_xyz.append(element_xyz_temp)
+    return np.array(out_xyz)
+
 def find_boundary_pts(boundary_dict=None,exclude_array=None):
     '''Find mesh points not in exclude_array.'''
     out_points = []

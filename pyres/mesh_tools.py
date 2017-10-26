@@ -22,134 +22,40 @@ class meshR3(object):
     def make_points(self, line_strexyz=None, clen=0.1,start_pts=1):
         '''Make point dictionary.'''
         
+        if line_strexyz is None:
+            # Make line data using default line settings
+            self.make_strxyz()
+        else:
+            self.line_strexyz = line_strexyz
+        
         if not hasattr(self,'points'):
             self.points = {}
         
-        elec_list = []
+        mesh_utils.make_points(self,clen,start_pts,ndim=3)  
         
-        for iline in np.arange(line_strexyz.shape[0]):    
-            if iline not in self.points.keys():
-                self.points[iline] = {}
-            for linestr,enum,x,y,z in line_strexyz[iline]:
-                self.points[iline].update({start_pts:[x,y,z,clen]})
-                elec_list.append([linestr,enum,start_pts]) # save data for protocol.dat
-                start_pts+=1
-                
-        self.electrode_array = np.array(elec_list)       
 
     def make_lines(self,start_lines=1):
         
-        self.start_lines=start_lines
-        self.lines = {}
-        self.surveyline_startend = {}
-        self.startpt,self.endpt = [],[]
-        for ikey in self.points.keys():
-            # Collect consecutive points into lines in reverse order
-            line_keys = np.sort(list(self.points[ikey].keys()))[::-1]
-            
-            # record start and end positions of line
-            self.startpt.append(line_keys[0])
-            self.endpt.append(line_keys[-1])
-            
-            # Save first line in section
-            self.surveyline_startend[ikey] = [self.start_lines]
-            
-            for istart,iend in zip(line_keys[:-1],line_keys[1:]):
-                self.lines.update({self.start_lines:[istart,iend]})
-                self.start_lines+=1
-            
-            # Save last line in section
-            self.surveyline_startend[ikey].append(self.start_lines-1)
-            
-        # Connectors for the lines
-        for istart1,istart2 in zip(self.startpt[:-1],self.startpt[1:]):
-            self.lines.update({self.start_lines:[istart1,istart2]})
-            self.start_lines+=1
+        mesh_utils.make_lines(self,start_lines)
         
-        for end1,iend2 in zip(self.endpt[:-1],self.endpt[1:]):
-            self.lines.update({self.start_lines:[end1,iend2]})
-            self.start_lines+=1
-        
-    def make_boundaries(self,boundary_dict=None,nforeground=4,nbackground=4):
+    def make_boundaries(self,nforeground=4,nbackground=4):
         '''Make boundaries from survey bounds.
-        
         
         Can eventually add capability to define non-square boundaries
         '''
         
-        self.boundaries = {}
-        # First make foreground boundaries by extended some constant beyond
-        # the corner points
-        max_pt_num = np.max(self.points[np.max(list(self.points.keys()))].keys())
-        fore_corners = np.arange(max_pt_num+1,max_pt_num+1+nforeground)
-        fore_pairs = np.c_[np.roll(fore_corners,-1),np.roll(fore_corners,2)]
-        
-        self.boundaries['foreground'] = {}
-        for ifore in np.arange(nforeground):
-            self.boundaries['foreground'].update({self.start_lines:
-                                                    fore_pairs[ifore,:]})
-            self.start_lines += 1
-        
-        # Background points and lines
-        new_max_pt = max_pt_num + nforeground + 1
-        back_corners = np.arange(new_max_pt,new_max_pt+nbackground)
-        back_pairs = np.c_[np.roll(back_corners,-1),np.roll(back_corners,2)]
-        
-        self.boundaries['background'] = {}
-        for iback in np.arange(nbackground):
-            self.boundaries['background'].update({self.start_lines:
-                                                    back_pairs[iback,:]})
-            self.start_lines += 1
+        mesh_utils.make_boundaries(self,nforeground,nbackground)
     
     def make_surfaces(self):
         
-        self.surfaces = {}   
-        seg_dict = {'nelectrodes':self.nelectrodes_per_line,
-                    'nlines':self.nlines,
-                    'topbot':True,
-                    'iline':np.arange(2*(self.nlines-1))}
-        self.connecting_segs = segment_loc(**seg_dict).reshape((2,-1)).T
-
-        self.surflines = {} # will have "Line Loop(#) = {}
+        mesh_utils.make_surfaces(self,ndim=3)
         
-        # Make foreground surfaces between individual lines
-        for iloop in np.arange(self.nlines-1):
-            topbot_edges = self.connecting_segs[iloop,:]
-            l1_startend = self.surveyline_startend[iloop+1]
-            line1 = np.arange(l1_startend[0],l1_startend[1]+1,1)
-            l2_startend = self.surveyline_startend[iloop]
-            line2 = np.arange(-l2_startend[1],-l2_startend[0]+1,1)
-            out_lines = np.hstack([topbot_edges[0],
-                                   line1,
-                                   -topbot_edges[1],
-                                   line2])
-            
-            self.surflines.update({self.start_lines:out_lines.tolist()})
-            self.start_lines += 1
-            
-            self.surfaces.update({self.start_lines:[self.start_lines-1]})
-            self.start_lines += 1
-
-        # Make bounding foreground surface from foreground lines and line-bounding lines
-        self.surflines.update({self.start_lines:np.roll(np.sort(list(self.boundaries['foreground'].keys())),1).tolist()}) # foreground boundary
-        iforeground = self.start_lines
-        self.start_lines += 1
-        lastsurvey_lines = self.surveyline_startend[self.nlines-1]
-        firstsurvey_lines = self.surveyline_startend[0]
-        survey_line_bounds = np.hstack([self.connecting_segs[:,0].ravel(),
-                                        np.arange(lastsurvey_lines[0],lastsurvey_lines[-1]+1),
-                                        -self.connecting_segs[::-1,1].ravel(),
-                                        np.arange(-firstsurvey_lines[-1],-firstsurvey_lines[0]+1)])
-        self.surflines.update({self.start_lines:np.roll(survey_line_bounds,-2).tolist()})# survey line boundary
-        self.start_lines += 1
-        self.surfaces.update({self.start_lines:[self.start_lines-1,self.start_lines-2]})
-        self.start_lines += 1
+    def make_regions(self, region_xyzpts=None, extend_to=None,
+                    clen=None, boundary_dict=None,region_fname=None,load_dict=None,
+                    outside_foreground=False,active_domain='foreground'):
+        '''Create geometry components for assigning model region.'''
         
-        # Make background surface between foreground and background lines
-        self.surflines.update({self.start_lines:np.roll(np.sort(list(self.boundaries['background'].keys())),1).tolist()}) # background line
-        self.start_lines += 1
-        self.surfaces.update({self.start_lines:[iforeground,self.start_lines-1]})
-
+        
     def write_geo(self,out_fname=None,boundary_dict=None,extrude_dict=None,ndigits=2):
        '''Write .geo file.
        
@@ -220,13 +126,16 @@ class meshR3(object):
         self.gmsh_to_R3_msg,self.nregions, self.mesh_dict,self.topo_xyz = gmsh_to_R3(**gmsh_to_R3_dict)
     
     def make_mesh(self,geom_dict=None,write_dict=None,
-                  run_gmsh=False, gmsh_dict=None):
+                  run_gmsh=False, gmsh_dict=None,region_dict=None):
         '''Run individual functions to make mesh.
         '''
         self.make_points(**geom_dict)
         self.make_lines()
         self.make_boundaries()
         self.make_surfaces()
+        if region_dict is not None:
+            self.make_regions(**region_dict)
+            write_dict.update({'region_dict':region_dict})
         self.write_geo(**write_dict)
         
         if run_gmsh:
@@ -398,7 +307,7 @@ class meshR2(object):
                     'nlines':self.nlines,
                     'topbot':True,
                     'iline':np.arange(2*(self.nlines-1))}
-        self.connecting_segs = segment_loc(**seg_dict).reshape((2,-1)).T
+        self.connecting_segs = mesh_utils.segment_loc(**seg_dict).reshape((2,-1)).T
 
         self.surflines = {} # will have "Line Loop(#) = {}
         key_order_sl = []
@@ -620,12 +529,6 @@ class meshR2(object):
                 self.run_gmsh(**gmsh_dict)
 #%% ------------------ Utilities ------------------            
             
-def segment_loc(iline=None,nelectrodes=None,nlines=None,topbot=False):
-    if topbot:
-        return nlines*(nelectrodes-1) + iline + 1
-    else:
-        return iline*(nelectrodes-1)
-
 def write_gmsh_geo(gmsh_obj=None,out_fname=None,boundary_dict=None,
                    extrude_dict=None,ndigits=2,mesh_dim=3,region_dict=None):
     '''Write gmsh .geo file.'''
@@ -661,18 +564,18 @@ def write_gmsh_geo(gmsh_obj=None,out_fname=None,boundary_dict=None,
             f.write("p2[]=Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }};\n".format(-boundary_dict['bdxdy'][0]-boundary_dict['fdxdy'][0],0.,0,np.min(gmsh_obj.startpt)))
             f.write("\n") # blank space
         else:
-            # Write Translate command for external boundaries
-            f.write("Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }}\n".format(boundary_dict['fdxdy'][0],boundary_dict['fdxdy'][1],0,np.max(gmsh_obj.startpt)))
-            f.write("Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }}\n".format(boundary_dict['fdxdy'][0],-boundary_dict['fdxdy'][1],0,np.min(gmsh_obj.startpt)))
-            f.write("Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }}\n".format(-boundary_dict['fdxdy'][0],-boundary_dict['fdxdy'][1],0,np.min(gmsh_obj.endpt)))
-            f.write("Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }}\n".format(-boundary_dict['fdxdy'][0],boundary_dict['fdxdy'][1],0,np.max(gmsh_obj.endpt)))
+            # Write Translate command for external boundaries, foreground first
+            f.write("Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }}\n".format(boundary_dict['fdxdy'][0],-boundary_dict['fdxdy'][1],0,np.max(gmsh_obj.startpt)))
+            f.write("Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }}\n".format(-boundary_dict['fdxdy'][0],-boundary_dict['fdxdy'][1],0,np.min(gmsh_obj.startpt)))
+            f.write("Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }}\n".format(-boundary_dict['fdxdy'][0],boundary_dict['fdxdy'][1],0,np.min(gmsh_obj.endpt)))
+            f.write("Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }}\n".format(boundary_dict['fdxdy'][0],boundary_dict['fdxdy'][1],0,np.max(gmsh_obj.endpt)))
             f.write("\n") # blank space
             
             # For far background
-            f.write("p1[]=Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }};\n".format(boundary_dict['bdxdy'][0],boundary_dict['bdxdy'][1],0,np.max(gmsh_obj.startpt)))
-            f.write("p2[]=Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }};\n".format(boundary_dict['bdxdy'][0],-boundary_dict['bdxdy'][1],0,np.min(gmsh_obj.startpt)))
-            f.write("p3[]=Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }};\n".format(-boundary_dict['bdxdy'][0],-boundary_dict['bdxdy'][1],0,np.min(gmsh_obj.endpt)))
-            f.write("p4[]=Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }};\n".format(-boundary_dict['bdxdy'][0],boundary_dict['bdxdy'][1],0,np.max(gmsh_obj.endpt)))
+            f.write("p1[]=Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }};\n".format(boundary_dict['bdxdy'][0],-boundary_dict['bdxdy'][1],0,np.max(gmsh_obj.startpt)))
+            f.write("p2[]=Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }};\n".format(-boundary_dict['bdxdy'][0],-boundary_dict['bdxdy'][1],0,np.min(gmsh_obj.startpt)))
+            f.write("p3[]=Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }};\n".format(-boundary_dict['bdxdy'][0],boundary_dict['bdxdy'][1],0,np.min(gmsh_obj.endpt)))
+            f.write("p4[]=Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }};\n".format(boundary_dict['bdxdy'][0],boundary_dict['bdxdy'][1],0,np.max(gmsh_obj.endpt)))
             f.write("\n") # blank space
         
         # Set characteristic length for background elements
@@ -683,16 +586,17 @@ def write_gmsh_geo(gmsh_obj=None,out_fname=None,boundary_dict=None,
         f.write("\n") # blank space
         
         if hasattr(gmsh_obj,'region_dict'):
-            # Write region geometry
-            f.write("// Region points \n")
-            for i in gmsh_obj.region_dict['order']:
-                # Write region points
-                f.write("// Points for region {}\n".format(i+1))
-                for ipt,lineptkey in enumerate(gmsh_obj.region_dict[i]['region_points']['order']):
-                    x,y,z,clen = gmsh_obj.region_dict[i]['region_points'][lineptkey]
-                    f.write("Point({0}) = {{{1}, {2}, {3}, {4}}};\n".format(lineptkey,x,y,z,clen)) # must reverse x,y to match R3 example
-                    all_pts.append(lineptkey)
-                f.write("\n")
+            if gmsh_obj['region_dict'] is not None:
+                # Write region geometry
+                f.write("// Region points \n")
+                for i in gmsh_obj.region_dict['order']:
+                    # Write region points
+                    f.write("// Points for region {}\n".format(i+1))
+                    for ipt,lineptkey in enumerate(gmsh_obj.region_dict[i]['region_points']['order']):
+                        x,y,z,clen = gmsh_obj.region_dict[i]['region_points'][lineptkey]
+                        f.write("Point({0}) = {{{1}, {2}, {3}, {4}}};\n".format(lineptkey,x,y,z,clen)) # must reverse x,y to match R3 example
+                        all_pts.append(lineptkey)
+                    f.write("\n")
         
         # Write foreground boundary lines
         if mesh_dim == 2:
@@ -744,47 +648,48 @@ def write_gmsh_geo(gmsh_obj=None,out_fname=None,boundary_dict=None,
         nregion_surfs = 0
         surf_keys_ordered = gmsh_obj.surfaces['order']
         if hasattr(gmsh_obj,'region_dict'):
-            # Write region geometry
-            f.write("// Region data \n")
-            region_phys_surfline_list = []
-            region_back_phys_surfline_list = []
-            region_fore_phys_surfline_list = []
-            region_phys_surf_list = []
-            for i in gmsh_obj.region_dict['order']:
-                
-                # Write region lines
-                f.write("// Lines for region {}\n".format(i))
-                line_nums = gmsh_obj.region_dict[i]['region_lines']['order']
-                for line_num in line_nums:
-                    if line_num not in all_lines:
-                        f.write("Line({0}) = {{{1}}};\n".format(line_num,', '.join([str(itemp) for itemp in gmsh_obj.region_dict[i]['region_lines'][line_num]])))
-                        all_lines.append(line_num)
-                f.write("\n") # blank space
-                
-                # Write region surface
-                for surfline_key in gmsh_obj.region_dict[i]['region_surflines']['order']:
-                    f.write("Line Loop({0}) = {{{1}}};\n".format(surfline_key,', '.join([str(itemp) for itemp in gmsh_obj.region_dict[i]['region_surflines'][surfline_key]])))
-                    if gmsh_obj.region_dict[i]['active_domain'] in ['foreground']:
-                        region_fore_phys_surfline_list.append(surfline_key)
-                    else:
-                        region_back_phys_surfline_list.append(surfline_key)
+            if gmsh_obj['region_dict'] is not None:
+                # Write region geometry
+                f.write("// Region data \n")
+                region_phys_surfline_list = []
+                region_back_phys_surfline_list = []
+                region_fore_phys_surfline_list = []
+                region_phys_surf_list = []
+                for i in gmsh_obj.region_dict['order']:
                     
-                for surf_key in gmsh_obj.region_dict[i]['region_surfaces']['order']:
-                    f.write("Plane Surface({0}) = {{{1}}};\n".format(surf_key,', '.join([str(itemp) for itemp in gmsh_obj.region_dict[i]['region_surfaces'][surf_key]])))
-                    region_phys_surf_list.append(surf_key)
+                    # Write region lines
+                    f.write("// Lines for region {}\n".format(i))
+                    line_nums = gmsh_obj.region_dict[i]['region_lines']['order']
+                    for line_num in line_nums:
+                        if line_num not in all_lines:
+                            f.write("Line({0}) = {{{1}}};\n".format(line_num,', '.join([str(itemp) for itemp in gmsh_obj.region_dict[i]['region_lines'][line_num]])))
+                            all_lines.append(line_num)
+                    f.write("\n") # blank space
                     
-                f.write("\n") # blank space
-            # Assign the physical surface for the region 
-            # Assumes only foreground and background assigned earlier
-            if len(region_back_phys_surfline_list)>0:
-                gmsh_obj.surfaces[surf_keys_ordered[1]].append(region_back_phys_surfline_list[0]) # add to end of background surface
-            
-            if len(region_fore_phys_surfline_list)>0:
-                gmsh_obj.surfaces[surf_keys_ordered[0]].append(region_fore_phys_surfline_list[0]) # add to end of foreground surface
-            
-            for ireg,reg_surf in enumerate(region_phys_surf_list):
-                nregion_surfs +=1
-                f.write("Physical Surface({0}) = {{{1}}};\n".format(nregion_surfs,reg_surf))
+                    # Write region surface
+                    for surfline_key in gmsh_obj.region_dict[i]['region_surflines']['order']:
+                        f.write("Line Loop({0}) = {{{1}}};\n".format(surfline_key,', '.join([str(itemp) for itemp in gmsh_obj.region_dict[i]['region_surflines'][surfline_key]])))
+                        if gmsh_obj.region_dict[i]['active_domain'] in ['foreground']:
+                            region_fore_phys_surfline_list.append(surfline_key)
+                        else:
+                            region_back_phys_surfline_list.append(surfline_key)
+                        
+                    for surf_key in gmsh_obj.region_dict[i]['region_surfaces']['order']:
+                        f.write("Plane Surface({0}) = {{{1}}};\n".format(surf_key,', '.join([str(itemp) for itemp in gmsh_obj.region_dict[i]['region_surfaces'][surf_key]])))
+                        region_phys_surf_list.append(surf_key)
+                        
+                    f.write("\n") # blank space
+                # Assign the physical surface for the region 
+                # Assumes only foreground and background assigned earlier
+                if len(region_back_phys_surfline_list)>0:
+                    gmsh_obj.surfaces[surf_keys_ordered[1]].append(region_back_phys_surfline_list[0]) # add to end of background surface
+                
+                if len(region_fore_phys_surfline_list)>0:
+                    gmsh_obj.surfaces[surf_keys_ordered[0]].append(region_fore_phys_surfline_list[0]) # add to end of foreground surface
+                
+                for ireg,reg_surf in enumerate(region_phys_surf_list):
+                    nregion_surfs +=1
+                    f.write("Physical Surface({0}) = {{{1}}};\n".format(nregion_surfs,reg_surf))
         
         
         # Write the lines needed to make surfaces
@@ -969,7 +874,7 @@ def read_gmsh(msh_fname=None):
                     if len(line.split()) == 1: # No spatial information, initiate
                         nodes = []
                     else: # Store spatial information
-                        entry = map(float, line.split())[1:] # Convert to float
+                        entry = list(map(float, line.split()))[1:] # Convert to float
                         nodes.append(entry)
                 elif inElements == 1: # Element section
                     if len(line.split()) == 1: # No spatial information, initiate
@@ -977,7 +882,7 @@ def read_gmsh(msh_fname=None):
                         triags = []
                         elem_info = []
                     else:
-                        entry = map(int, line.split())[1:]
+                        entry = list(map(int, line.split()))[1:]
                         elem_info.append(entry[:4])
                         # mapping physical region to zone number
                         if entry[0] == 6:

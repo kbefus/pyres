@@ -9,6 +9,10 @@ http://www.es.lancs.ac.uk/people/amb/Freeware/freeware.htm
 * pyres is a Python wrapper for R2 and R3 allowing mesh creation, forward and inverse modeling, and simple output visualization
 * Version 1.0
 
+### Citation ###
+
+Befus, K.M. (2017), pyres: A Python Wrapper for Electrical Resistivity Modeling with R2, J. Geophys. Eng., doi: 10.1088/1742-2140/aa93ad.
+
 ### Installation and testing ###
 
 * Install using setup.py

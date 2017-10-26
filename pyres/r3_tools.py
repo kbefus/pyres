@@ -64,9 +64,9 @@ class R3(object):
       
         
         
-    def r3_in(self, in_fname='R3t.in', singularity_type=0, num_regions_flag=1,
+    def r3_in(self, in_fname='R3t.in', singularity_type=0,add_dir_bool=False,
               electrode_array=None, startingRfile=None, fwd_resis=1e2, inv_dict=inv_defaults,
-              output_domain=None,zminmax=[-50.,0.]):
+              output_domain=None,reg_elems=None,zminmax=[-50.,0.]):
         '''Make R3t.in file.
         
         
@@ -82,10 +82,10 @@ class R3(object):
                 R3tin_output_file = os.path.join(self.survey_dir,in_fname)
                 
         # Add directory if needed
-        add_dir_bool=False
-        if startingRfile is not None:
-            if os.path.dirname(startingRfile) is '':
-                add_dir_bool = True
+#        add_dir_bool=False
+#        if startingRfile is not None:
+#            if os.path.dirname(startingRfile) is '':
+#                add_dir_bool = True
             
         if add_dir_bool:
                 startingRfile = os.path.join(self.survey_dir,startingRfile)
@@ -100,13 +100,21 @@ class R3(object):
             self.inv_dict['num_xy_poly'] = output_domain.shape[0]
             self.inv_dict['xy_poly'] = output_domain.copy()
         
-        r3_write_dict = {'in_fname':R3tin_output_file,'survey_name':self.survey_name,
-                      'job_type':self.job_type, 'singularity_type':singularity_type,
-                      'num_regions_flag':num_regions_flag,'electrode_array':electrode_array,
-                      'startingRfile':startingRfile,'fwd_resis':fwd_resis,'inv_dict':self.inv_dict,
-                      'zminmax':zminmax}
+        if reg_elems is None and startingRfile is None:
+            num_regions_flag = 1
+        elif reg_elems is None and startingRfile is not None:
+            num_regions_flag = 0
+        else:
+            num_regions_flag = len(reg_elems)
         
-        write_r3_in(**r3_write_dict)
+        self.r3_options = {'job_type':self.job_type,'singularity_type':singularity_type}
+        self.r3_write_dict = {'in_fname':R3tin_output_file,'survey_name':self.survey_name,
+                              'r3_options':self.r3_options,
+                              'num_regions_flag':num_regions_flag,'electrode_array':electrode_array,
+                              'startingRfile':startingRfile,'fwd_resis':fwd_resis,'inv_dict':self.inv_dict,
+                              'zminmax':zminmax,'reg_elems':reg_elems}
+        
+        write_r3_in(**self.r3_write_dict)
     
     def r3_protocol(self,protocol_fname='protocol.dat', meas_data=None):
         
@@ -148,9 +156,9 @@ class R3(object):
             self.run_r3()
                 
 # --------------------- Helper functions -----------------------                
-def write_r3_in(in_fname='R3t.in', survey_name=None ,job_type=None, singularity_type=0, num_regions_flag=1,
+def write_r3_in(in_fname='R3t.in', survey_name=None ,r3_options=None, num_regions_flag=1,
               electrode_array=None, startingRfile=None, fwd_resis=None, inv_dict=inv_defaults,
-              zminmax=[-50.,0.]):
+              zminmax=[-50.,0.],reg_elems=None):
     
     with open(in_fname,'w') as f:
             
@@ -159,18 +167,19 @@ def write_r3_in(in_fname='R3t.in', survey_name=None ,job_type=None, singularity_
                     survey_name,time.strftime("%Y-%m-%d %H:%M:%S",time.localtime()))
         
         f.write(header)
-        f.write("{}  {}  << job_type, singularity_type\n".format(job_type,singularity_type))
+        f.write("\n") # blank space
+        f.write("{}  {}  << job_type, singularity_type\n".format(r3_options['job_type'],r3_options['singularity_type']))
         f.write("\n") # blank space
         
         f.write("{}  << num_regions\n".format(num_regions_flag))
         if num_regions_flag == 0 and startingRfile is not None:
-            f.write("{}  << starting model file\n").format(startingRfile)
+            f.write("{}\n".format(startingRfile))
             f.write("\n") # blank space
         else:
             f.write("{}  << constant resistivity applied to all elements\n".format(fwd_resis))
 
         # Method-specific components
-        if job_type == 1 or job_type in ['inverse','Inverse','inv','I','i']: # Inverse model options
+        if r3_options['job_type'] == 1 or r3_options['job_type'] in ['inverse','Inverse','inv','I','i']: # Inverse model options
             f.write("\n") # blank space
             f.write("{0:d}  << data type".format(inv_dict['data_type']))
             f.write("\n") # blank space
@@ -229,8 +238,13 @@ def write_r3_in(in_fname='R3t.in', survey_name=None ,job_type=None, singularity_
         
         # Write electrode information
         f.write("{}  << num_electrodes\n".format(electrode_array.shape[0]))
+        icount=0
         for elec_row in electrode_array:
-            f.write("{0:8.0f}, {1:8.0f}, {2:8.0f}  << string number, electrode number, mesh node\n".format(*elec_row))
+            if icount==0:
+                f.write("{0:8.0f} {1:8.0f} {2:8.0f}  << string number, electrode number, mesh node\n".format(*elec_row))
+                icount+=1
+            else:
+                f.write("{0:8.0f} {1:8.0f} {2:8.0f}\n".format(*elec_row))
             
         f.write("\n") # blank space 
 
@@ -258,7 +272,12 @@ def write_r3_protocol(protocol_fname=None, job_type=None,
             # 0) measurement id, 1) P+ electrode "string" and 2) elec_num, 3) P- electrode "string" and 4) elec_num,
             # 5) C+ electrode "string" and 6) elec_num, 7) C- electrode "string" and 8) elec_num
             inv_meas_format = "{0:8.0f}  {1:8.0f} {2:8.0f}  {3:8.0f} {4:8.0f}  {5:8.0f} {6:8.0f}  {7:8.0f} {8:8.0f}\n"
-        
+            if meas_data.shape[1] > 9:
+                meas_data = meas_data[:,:9]
+                
+        if meas_data[0,0]==0:
+            meas_data[:,0] = meas_data[:,0]+1 # start with measurement 1
+                
         for meas_row in meas_data:
             f.write(inv_meas_format.format(*meas_row))
         
