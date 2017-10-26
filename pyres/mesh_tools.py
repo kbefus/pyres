@@ -874,7 +874,7 @@ def read_gmsh(msh_fname=None):
                     if len(line.split()) == 1: # No spatial information, initiate
                         nodes = []
                     else: # Store spatial information
-                        entry = map(float, line.split())[1:] # Convert to float
+                        entry = list(map(float, line.split()))[1:] # Convert to float
                         nodes.append(entry)
                 elif inElements == 1: # Element section
                     if len(line.split()) == 1: # No spatial information, initiate
@@ -882,7 +882,7 @@ def read_gmsh(msh_fname=None):
                         triags = []
                         elem_info = []
                     else:
-                        entry = map(int, line.split())[1:]
+                        entry = list(map(int, line.split()))[1:]
                         elem_info.append(entry[:4])
                         # mapping physical region to zone number
                         if entry[0] == 6:
