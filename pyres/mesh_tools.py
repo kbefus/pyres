@@ -565,16 +565,16 @@ def write_gmsh_geo(gmsh_obj=None,out_fname=None,boundary_dict=None,
             f.write("\n") # blank space
         else:
             # Write Translate command for external boundaries, foreground first
-            f.write("Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }}\n".format(boundary_dict['fdxdy'][0],-boundary_dict['fdxdy'][1],0,np.max(gmsh_obj.startpt)))
+            f.write("Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }}\n".format(-boundary_dict['fdxdy'][0],boundary_dict['fdxdy'][1],0,np.max(gmsh_obj.startpt)))
             f.write("Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }}\n".format(-boundary_dict['fdxdy'][0],-boundary_dict['fdxdy'][1],0,np.min(gmsh_obj.startpt)))
-            f.write("Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }}\n".format(-boundary_dict['fdxdy'][0],boundary_dict['fdxdy'][1],0,np.min(gmsh_obj.endpt)))
+            f.write("Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }}\n".format(boundary_dict['fdxdy'][0],-boundary_dict['fdxdy'][1],0,np.min(gmsh_obj.endpt)))
             f.write("Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }}\n".format(boundary_dict['fdxdy'][0],boundary_dict['fdxdy'][1],0,np.max(gmsh_obj.endpt)))
             f.write("\n") # blank space
             
             # For far background
-            f.write("p1[]=Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }};\n".format(boundary_dict['bdxdy'][0],-boundary_dict['bdxdy'][1],0,np.max(gmsh_obj.startpt)))
+            f.write("p1[]=Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }};\n".format(-boundary_dict['bdxdy'][0],boundary_dict['bdxdy'][1],0,np.max(gmsh_obj.startpt)))
             f.write("p2[]=Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }};\n".format(-boundary_dict['bdxdy'][0],-boundary_dict['bdxdy'][1],0,np.min(gmsh_obj.startpt)))
-            f.write("p3[]=Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }};\n".format(-boundary_dict['bdxdy'][0],boundary_dict['bdxdy'][1],0,np.min(gmsh_obj.endpt)))
+            f.write("p3[]=Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }};\n".format(boundary_dict['bdxdy'][0],-boundary_dict['bdxdy'][1],0,np.min(gmsh_obj.endpt)))
             f.write("p4[]=Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }};\n".format(boundary_dict['bdxdy'][0],boundary_dict['bdxdy'][1],0,np.max(gmsh_obj.endpt)))
             f.write("\n") # blank space
         
