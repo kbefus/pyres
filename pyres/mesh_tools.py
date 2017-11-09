@@ -1166,7 +1166,7 @@ def load_delim(fname,nheaders=2,delimiter=' ',
         for iline in f:
             if irow < nheaders:
                 header_info.append(iline)
-            else:
+            elif iline not in ['\n']:
                 data_list.append([float(ipiece.strip().strip(' \t')) for ipiece in np.array(iline.split(delimiter))[cols2read]])
             irow += 1
     
