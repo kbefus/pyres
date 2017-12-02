@@ -16,7 +16,7 @@ Befus, K.M. (2017), pyres: A Python Wrapper for Electrical Resistivity Modeling 
 ### Installation and testing ###
 
 * Install using setup.py
-* Eventually will have pip functionality
+* Or with pip: "pip install pyresitivity"
 * Dependencies: numpy, scipy, and matplotlib beyond default python packages
 * How to run tests: Test with R2_examples\Surface_*.py scripts
 

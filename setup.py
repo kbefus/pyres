@@ -21,7 +21,7 @@ except:
     with open("README.md", 'r') as f:
         long_description = f.read()
 
-setup(name='pyres',
+setup(name='pyresistivity',
       description='pyres is a Python package to create, run, and post-process R2 electrical resistivity forward and inverse models.',
       long_description=long_description,
       author='Kevin M. Befus',
