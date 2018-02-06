@@ -538,6 +538,9 @@ def write_gmsh_geo(gmsh_obj=None,out_fname=None,boundary_dict=None,
     # Keep track of written geometries
     all_pts = []
     all_lines = []
+    foreground_pt_fmt = "Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }}\n"
+    out_fore_mult = mesh_utils.find_line_orientation(gmsh_obj)
+    
     with open(out_fname,'w') as f:
         f.write("// Gmsh project created using Python on {}\n".format(time.strftime("%Y-%m-%d %H:%M:%S",time.localtime()))) 
         # Write point data by survey row
@@ -551,10 +554,10 @@ def write_gmsh_geo(gmsh_obj=None,out_fname=None,boundary_dict=None,
         
         if mesh_dim == 2:
             # Write Translate command for external foreground boundaries
-            f.write("Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }}\n".format(boundary_dict['fdxdy'][0],0.,0,np.max(gmsh_obj.endpt)))
-            f.write("Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }}\n".format(boundary_dict['fdxdy'][0],-boundary_dict['fdxdy'][1],0,np.max(gmsh_obj.endpt)))
-            f.write("Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }}\n".format(-boundary_dict['fdxdy'][0],-boundary_dict['fdxdy'][1],0,np.min(gmsh_obj.startpt)))
-            f.write("Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }}\n".format(-boundary_dict['fdxdy'][0],0.,0,np.min(gmsh_obj.startpt)))
+            f.write(foreground_pt_fmt.format(boundary_dict['fdxdy'][0],0.,0,np.max(gmsh_obj.endpt)))
+            f.write(foreground_pt_fmt.format(boundary_dict['fdxdy'][0],-boundary_dict['fdxdy'][1],0,np.max(gmsh_obj.endpt)))
+            f.write(foreground_pt_fmt.format(-boundary_dict['fdxdy'][0],-boundary_dict['fdxdy'][1],0,np.min(gmsh_obj.startpt)))
+            f.write(foreground_pt_fmt.format(-boundary_dict['fdxdy'][0],0.,0,np.min(gmsh_obj.startpt)))
             f.write("\n") # blank space
             
             # For far background
@@ -564,11 +567,12 @@ def write_gmsh_geo(gmsh_obj=None,out_fname=None,boundary_dict=None,
             f.write("p2[]=Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }};\n".format(-boundary_dict['bdxdy'][0]-boundary_dict['fdxdy'][0],0.,0,np.min(gmsh_obj.startpt)))
             f.write("\n") # blank space
         else:
+            
             # Write Translate command for external boundaries, foreground first
-            f.write("Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }}\n".format(boundary_dict['fdxdy'][0],-boundary_dict['fdxdy'][1],0,np.max(gmsh_obj.startpt)))
-            f.write("Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }}\n".format(-boundary_dict['fdxdy'][0],-boundary_dict['fdxdy'][1],0,np.min(gmsh_obj.startpt)))
-            f.write("Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }}\n".format(-boundary_dict['fdxdy'][0],boundary_dict['fdxdy'][1],0,np.min(gmsh_obj.endpt)))
-            f.write("Translate {{{0},{1},{2}}} {{ Duplicata {{ Point{{{3}}}; }} }}\n".format(boundary_dict['fdxdy'][0],boundary_dict['fdxdy'][1],0,np.max(gmsh_obj.endpt)))
+            f.write(foreground_pt_fmt.format(out_fore_mult[2][0]*boundary_dict['fdxdy'][0],out_fore_mult[2][1]*boundary_dict['fdxdy'][1],0,np.max(gmsh_obj.startpt)))
+            f.write(foreground_pt_fmt.format(out_fore_mult[0][0]*boundary_dict['fdxdy'][0],out_fore_mult[0][1]*boundary_dict['fdxdy'][1],0,np.min(gmsh_obj.startpt)))
+            f.write(foreground_pt_fmt.format(out_fore_mult[1][0]*boundary_dict['fdxdy'][0],out_fore_mult[1][1]*boundary_dict['fdxdy'][1],0,np.min(gmsh_obj.endpt)))
+            f.write(foreground_pt_fmt.format(out_fore_mult[3][0]*boundary_dict['fdxdy'][0],out_fore_mult[3][1]*boundary_dict['fdxdy'][1],0,np.max(gmsh_obj.endpt)))
             f.write("\n") # blank space
             
             # For far background

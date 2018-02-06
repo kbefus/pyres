@@ -189,8 +189,8 @@ def load_er_data(fname=None,data_fmt=None, inf_electrode_xy = [None,None],
             fmt_dict = all_fmt_dict['lipp']
             electrode_dict={}
             nan_val = '-'
-            dtype = 'lipp'
-    
+            dtype = 'lipp'         
+
     # Load data to an array
     with open(fname,'r') as er_file:
         header_info = []
@@ -212,6 +212,7 @@ def load_er_data(fname=None,data_fmt=None, inf_electrode_xy = [None,None],
     
     # Convert data types to desired formats
     data_array = np.array(data_list)
+
     if nan_val is not None:
         data_array[data_array==nan_val] = np.nan
     data_dict = {}

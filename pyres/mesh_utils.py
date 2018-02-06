@@ -559,6 +559,37 @@ def find_boundary_pts(boundary_dict=None,exclude_array=None):
             
     return np.array(out_points),out_edge_keys
 
+def find_line_orientation(mesh_obj=None):
+    
+    line_startpts = mesh_obj.startpt
+    line_endpts = mesh_obj.endpt
+    
+    start_list = []
+    end_list = []
+    for iline,(stpt,endpt) in enumerate(zip(line_startpts,line_endpts)):
+        start_list.append(mesh_obj.points[iline][stpt][:-1]) # don't need clen
+        end_list.append(mesh_obj.points[iline][endpt][:-1])
+    
+    s_array = np.array(start_list)
+    e_array = np.array(end_list)
+    # Need to find dx dy for first and last lines
+    dx_0 = e_array[0,0]-s_array[0,0]
+    dy_0 = e_array[1,1]-e_array[0,1]
+    dx_end = e_array[-1,0]-s_array[-1,0]
+    dy_end = e_array[-1,1]-e_array[-2,1]
+    
+    out_multipliers = np.array([[-1,-1],[1,-1],[-1,1],[1,1]]) # e.g., 1, 8, 49, 56
+    if dx_0 < 0:
+        out_multipliers[:2] = out_multipliers[:2][::-1]
+    if dy_0 < 0 and dy_end < 0:
+        out_multipliers[:,1] = -out_multipliers[:,1]
+    if dx_end < 0: 
+        out_multipliers[2:3] = out_multipliers[2:3][::-1]
+
+    return out_multipliers
+    
+    
+    
 
 def load_region_xyz(fname,nheaders=2,delimiter=',',
                     col_scales = [1,1]):
