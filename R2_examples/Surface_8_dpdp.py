@@ -78,7 +78,7 @@ mr2.msh_to_dat(**to_dat_dict)
 #%%
 # ----------------- Setup R2 inputs ----------------
 job_type = 0 # 0=forward, 1=inverse model
-r2_dict = {'survey_name':'Surface_1_dpdp',
+r2_dict = {'survey_name':'Surface_8_dpdp',
            'survey_dir': work_dir, 'job_type':job_type,
            'exe_dir':exe_dir,
            'exe_name':'R2.exe'}

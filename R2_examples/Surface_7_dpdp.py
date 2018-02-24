@@ -196,8 +196,8 @@ inv_r2_in_dict2.update({'reg_elems':None,
                        'inv_dict':inv_options2})
 
 # Load forward model data
-meas_fwd_data_t0 = r2_tools.load_fwd_output(work_dir=out_fwd_dirs[1])
-meas_fwd_data_t1 = r2_tools.load_fwd_output(work_dir=out_fwd_dirs[2])
+meas_fwd_data_t0 = pyres_utils.load_fwd_output(work_dir=out_fwd_dirs[1])
+meas_fwd_data_t1 = pyres_utils.load_fwd_output(work_dir=out_fwd_dirs[2])
 
 # Need to append column of t1 measurements
 meas_fwd_data = np.column_stack([meas_fwd_data_t0,meas_fwd_data_t1[:,5]])

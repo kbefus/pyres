@@ -590,7 +590,7 @@ def write_gmsh_geo(gmsh_obj=None,out_fname=None,boundary_dict=None,
         f.write("\n") # blank space
         
         if hasattr(gmsh_obj,'region_dict'):
-            if gmsh_obj['region_dict'] is not None:
+            if gmsh_obj.region_dict is not None:
                 # Write region geometry
                 f.write("// Region points \n")
                 for i in gmsh_obj.region_dict['order']:
@@ -652,7 +652,7 @@ def write_gmsh_geo(gmsh_obj=None,out_fname=None,boundary_dict=None,
         nregion_surfs = 0
         surf_keys_ordered = gmsh_obj.surfaces['order']
         if hasattr(gmsh_obj,'region_dict'):
-            if gmsh_obj['region_dict'] is not None:
+            if gmsh_obj.region_dict is not None:
                 # Write region geometry
                 f.write("// Region data \n")
                 region_phys_surfline_list = []
