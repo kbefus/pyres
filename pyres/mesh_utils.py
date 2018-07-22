@@ -573,10 +573,16 @@ def find_line_orientation(mesh_obj=None):
     s_array = np.array(start_list)
     e_array = np.array(end_list)
     # Need to find dx dy for first and last lines
-    dx_0 = e_array[0,0]-s_array[0,0]
-    dy_0 = e_array[1,1]-e_array[0,1]
-    dx_end = e_array[-1,0]-s_array[-1,0]
-    dy_end = e_array[-1,1]-e_array[-2,1]
+    if  e_array.shape[0]>1:
+        dx_0 = e_array[0,0]-s_array[0,0]
+        dy_0 = e_array[1,1]-e_array[0,1]
+        dx_end = e_array[-1,0]-s_array[-1,0]
+        dy_end = e_array[-1,1]-e_array[-2,1]
+    else:
+        dx_0 = e_array[0,0]-s_array[0,0]
+        dy_0 = e_array[0,1]-s_array[0,1]
+        dx_end = dx_0
+        dy_end = dy_0
     
     out_multipliers = np.array([[-1,-1],[1,-1],[-1,1],[1,1]]) # e.g., 1, 8, 49, 56
     if dx_0 < 0:

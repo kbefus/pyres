@@ -9,6 +9,10 @@ import os, sys
 import numpy as np
 from scipy.interpolate import griddata
 
+############### Apparent resistivity to Resistance functions ################
+
+# Dipole-dipole
+app_res_to_res_dipdip = lambda a,n,app_res: app_res/(np.pi*a*n*(n+1)*(n+2))
 
 ############### ER data format variables ###########################
 str_fmt = str
@@ -16,6 +20,8 @@ float_fmt = float
 int_fmt = int
 
 ######### Example of formating for field data #########
+# A,B are current electrodes
+# M,N are potential electrodes
 stg_cols_3d = ['id','user','date','time','resis','resis_error',
                'currentma','appres','line_id',
                'Ax','Ay','Az','Bx','By','Bz',
@@ -60,13 +66,34 @@ lipp_fmt = {'id':int_fmt,'A':int_fmt,'B':int_fmt,'M':int_fmt,'N':int_fmt,'I':flo
              'dU':float_fmt,'U90':float_fmt,'dU90':float_fmt,'rho':float_fmt,'phi':float_fmt,
              'f':float_fmt,'n':int_fmt,'nAB':int_fmt,'Profile':float_fmt,'Spread':float_fmt,'PseudoZ':float_fmt,
              'X':float_fmt,'Y':float_fmt,'Z':float_fmt,'date':str_fmt,'time':str_fmt,'U(Tx)':float_fmt}
+#--------------------------------------------------------
+# Geotomo/Res2dinv files
 
+geotomo_types = {1:'wenner',2:'polepole',3:'dipdip',6:'poledip',7:'schlum',8:'eqdipdip',11:'general',}
+geotomo_cols={'header_default':{0:'name',1:'e_spacing',2:'array_type',3:'n_data',4:'x_type',5:'ip_flag'},
+             'header_general':{0:'name',1:'e_spacing',2:'array_type',3:'sub_array_type',4:'app_res_flag',
+                               5:'n_data',6:'x_type',7:'ip_flag'},
+             'dipdip':['x','a','n','rho'],
+             'default':['x','a','rho'],
+             'general':['Ax','Az','Bx','Bz','Mx','Mz','Nx','Nz','rho_or_resis']}
+geotomo_fmt={'header':{'name':str_fmt,'e_spacing':float_fmt,'array_type':int_fmt,
+                        'n_data':int_fmt,'x_type':int_fmt,'ip_flag':int_fmt,
+                        'sub_array_type':int_fmt,'app_res_flag':int_fmt},
+              'data':{'x':float_fmt,'a':float_fmt,'n':int_fmt,'rho':float_fmt,
+                      'Ax':float_fmt,'Ay':float_fmt,'Az':float_fmt,
+                      'Bx':float_fmt,'By':float_fmt,'Bz':float_fmt,
+                      'Mx':float_fmt,'My':float_fmt,'Mz':float_fmt,
+                      'Nx':float_fmt,'Ny':float_fmt,'Nz':float_fmt,
+                      'resis':float_fmt,'resis_error':float_fmt}}
+#--------------------------------------------------------
 all_fmt_dict = {'agi':{'fmt':stg_fmt_3d,'cols':stg_cols_3d,
                        'delimiter':',','nheader':3},
                 'syscal':{'fmt':syscal_fmt,'cols':syscal_cols,
                           'delimiter':',','nheader':1},
                 'lipp':{'fmt':lipp_fmt,'cols':lipp_cols,
-                        'delimiter':None,'nheader':269}}
+                        'delimiter':None,'nheader':269},
+                'geotomo':{'fmt':geotomo_fmt,'cols':geotomo_cols,
+                           'delimiter':'\t','nheader':6}}
 
 ################ Post-processing utilities ################
 def doi_oldenburg_li_func(res_array1=None,res_array2=None,
@@ -176,14 +203,16 @@ def read_trn(work_dir=None,fname=None,
     return data_out
                            
 def load_er_data(fname=None,data_fmt=None, inf_electrode_xy = [None,None],
-                 string_nums=1,fmt_dict=None, nan_val=None):
+                 string_nums=1,fmt_dict=None, nan_val=None, skip_vals=['\n'],
+                 error_percent=None):
     '''Load resistivity data.'''
     if fmt_dict is None:
         if data_fmt.lower() in ['agi']:
             fmt_dict = all_fmt_dict['agi']
             dtype = 'agi'
-        elif data_fmt.lower() in ['geotomo']:
+        elif data_fmt.lower() in ['geotomo','res2dinv','res2d']:
             fmt_dict = all_fmt_dict['geotomo']
+            header_dict = {} # store header information in dictionary
             dtype = 'geotomo'
         elif data_fmt.lower() in ['lipp','lippmann']:
             fmt_dict = all_fmt_dict['lipp']
@@ -197,18 +226,31 @@ def load_er_data(fname=None,data_fmt=None, inf_electrode_xy = [None,None],
         data_list = []
         irow = 0
         for iline in er_file:
-            if irow < fmt_dict['nheader']:
-                header_info.append(iline)
-                if dtype in ['lipp']:
-                    # Find electrode positions
-                    if 'Electrode [' in iline:
-                        temp_Edata = iline.split('=')
-                        pos_data = [float(itemp) for itemp in temp_Edata[1].split()]
-                        Enum = int(temp_Edata[0].split('[')[-1].split(']')[0])
-                        electrode_dict.update({Enum:pos_data})
-            else:
-                data_list.append([ipiece.strip(' \t') for ipiece in iline.split(fmt_dict['delimiter'])])
-            irow += 1
+            if iline not in skip_vals:
+                if irow < fmt_dict['nheader']:
+                    header_info.append(iline)
+                    if dtype in ['lipp']:
+                        # Find electrode positions
+                        if 'Electrode [' in iline:
+                            temp_Edata = iline.split('=')
+                            pos_data = [float(itemp) for itemp in temp_Edata[1].split()]
+                            Enum = int(temp_Edata[0].split('[')[-1].split(']')[0])
+                            electrode_dict.update({Enum:pos_data})
+                    elif dtype in ['geotomo']:
+                        if not hasattr(header_dict,'array_type'):
+                            header_dict.update({fmt_dict['cols']['header_default'][irow]:fmt_dict['fmt']['header'][fmt_dict['cols']['header_default'][irow]](iline.strip('\n'))})
+                        else:
+                            if header_dict['array_type']==11: # general has more information
+                                header_dict.update({fmt_dict['cols']['header_general'][irow]:fmt_dict['fmt']['header'][fmt_dict['cols']['header_general'][irow]](iline.strip('\n'))})
+                            else:
+                                header_dict.update({fmt_dict['cols']['header_default'][irow]:fmt_dict['fmt']['header'][fmt_dict['cols']['header_default'][irow]](iline.strip('\n'))})
+                else:
+                    if dtype in ['geotomo']:
+                        if irow < len(header_dict.keys())+header_dict['n_data']:
+                            data_list.append([ipiece.strip(' \t').strip('\n') for ipiece in iline.split(fmt_dict['delimiter'])])
+                    else:
+                        data_list.append([ipiece.strip(' \t').strip('\n') for ipiece in iline.split(fmt_dict['delimiter'])])
+                irow += 1
     
     # Convert data types to desired formats
     data_array = np.array(data_list)
@@ -216,8 +258,16 @@ def load_er_data(fname=None,data_fmt=None, inf_electrode_xy = [None,None],
     if nan_val is not None:
         data_array[data_array==nan_val] = np.nan
     data_dict = {}
-    for icol,active_col in enumerate(fmt_dict['cols'][:len(data_list[0])]):
-        data_dict.update({active_col:data_array[:,icol].astype(fmt_dict['fmt'][active_col])})
+    if dtype in ['geotomo']:
+        array_name = geotomo_types[header_dict['array_type']]
+        if array_name not in list(fmt_dict['cols'].keys()):
+            array_name = 'default'
+            
+        for icol,active_col in enumerate(fmt_dict['cols'][array_name][:len(data_list[0])]):
+            data_dict.update({active_col:data_array[:,icol].astype(fmt_dict['fmt']['data'][active_col])})
+    else:
+        for icol,active_col in enumerate(fmt_dict['cols'][:len(data_list[0])]):
+            data_dict.update({active_col:data_array[:,icol].astype(fmt_dict['fmt'][active_col])})
     
 
     position_keys = ['A','B','M','N']
@@ -232,7 +282,33 @@ def load_er_data(fname=None,data_fmt=None, inf_electrode_xy = [None,None],
         
         # Need to also define resis (V/I)
         data_dict['resis'] = data_dict['U']/data_dict['I']
+    
+    # For geotomo data, need to massage data depending on array type of data input
+    if dtype in ['geotomo']:
+        if array_name in ['dipdip']:
+            # Need to assign electrode positions
+            data_dict['Ax'] = data_dict['x']
+            data_dict['Bx'] = data_dict['Ax'] + data_dict['a']
+            data_dict['Mx'] = data_dict['Bx'] + data_dict['a']*data_dict['n']
+            data_dict['Nx'] = data_dict['Mx'] + data_dict['a']
+            data_dict['resis'] = app_res_to_res_dipdip(data_dict['a'],data_dict['n'],data_dict['rho'])
+            if error_percent is not None:
+                data_dict['resis_error'] = error_percent*np.ones_like(data_dict['x'])
+            else:
+                data_dict['resis_error'] = 0*np.ones_like(data_dict['x'])
+            # Force all *y locations to 0, need general array to specify
+            data_dict['Ay'] = np.zeros_like(data_dict['x'])
+            data_dict['By'] = np.zeros_like(data_dict['x'])
+            data_dict['My'] = np.zeros_like(data_dict['x'])
+            data_dict['Ny'] = np.zeros_like(data_dict['x'])
             
+        elif array_name in ['general'] and data_dict['app_res_flag']==1:
+            data_dict['resis'] = app_res_to_res_dipdip(data_dict['a'],data_dict['n'],data_dict['rho'])
+            if error_percent is not None:
+                data_dict['resis_error'] = error_percent*np.ones_like(data_dict['x'])
+            else:
+                data_dict['resis_error'] = 0*np.ones_like(data_dict['x'])
+        
     inf_edict = {}
     if inf_electrode_xy[0] is not None: # find appearances of inf electrode
         all_x = []
