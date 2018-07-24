@@ -30,5 +30,5 @@ setup(name='pyresistivity',
       platforms='Windows, Mac OS-X, Unix',
       install_requires=['numpy>=1.7'],
       packages=['pyres'],
-      version='1.0.0',
+      version='1.0.1',
       keywords='geophysics resistivity inversion')
