@@ -18,8 +18,7 @@ try:
 
     long_description = pypandoc.convert('README.md', 'rst')
 except:
-    with open("README.md", 'r') as f:
-        long_description = f.read()
+    pass
 
 setup(name='pyresistivity',
       description='pyres is a Python package to create, run, and post-process R2 electrical resistivity forward and inverse models.',
