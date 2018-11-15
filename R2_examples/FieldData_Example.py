@@ -31,7 +31,7 @@ meas_data, electrode_data = pyres_utils.load_er_data(**load_dict)
 
 electrode_data[:,3] = electrode_data[:,4] # force y to be elevation
 nlines = np.unique(electrode_data[:,0]).shape[0] # assumes each line is a new string
-nelectrodes_per_line = electrode_data.shape[0]/nlines
+nelectrodes_per_line = int(electrode_data.shape[0]/nlines)
 line_strexyz = electrode_data.reshape((nlines,nelectrodes_per_line,-1))
 #%% ############## Create triangular mesh ######################
 # Initialize meshR2 object with basic line information
