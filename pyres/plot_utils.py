@@ -336,9 +336,8 @@ def plot_res(fname=None,work_dir=None,
                  'interp_method':method,'inv_col':inv_col}
 
     X,Y,all_ER = grid_inv_data(**grid_dict)
-    
-    minx,maxx = np.nanmin(X),np.nanmax(X)
 
+    minx,maxx = np.nanmin(X),np.nanmax(X)
     
     if topog_xy is not None:
         ydif = extrap(X[0,:],topog_xy[:,0],topog_xy[:,1])-Y[0,:]

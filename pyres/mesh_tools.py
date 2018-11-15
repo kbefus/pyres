@@ -875,13 +875,13 @@ def read_gmsh(msh_fname=None):
                 if line.find('EndMeshFormat') > 0: inFormat = 0
             else: # Not a section header
                 if inNodes == 1: # Node section
-                    if len(line.split()) == 1: # No spatial information, initiate
+                    if len(line.split()) <= 2: # No spatial information, initiate
                         nodes = []
                     else: # Store spatial information
                         entry = list(map(float, line.split()))[1:] # Convert to float
                         nodes.append(entry)
                 elif inElements == 1: # Element section
-                    if len(line.split()) == 1: # No spatial information, initiate
+                    if len(line.split()) <= 2: # No spatial information, initiate
                         prisms, tets, zones = [], [], []
                         triags = []
                         elem_info = []

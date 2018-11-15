@@ -540,6 +540,8 @@ def force_grid(inv_data=None,col_names = ['x','y','inv','log_inv']):
         icol = 0
         for icount_col,(col_edge,row_edge) in enumerate(zip(col_ids[1:],num_yvals)):
             new_array[:row_edge,icount_col] = inv_data[icol:col_edge,iname]
+            if col_name in ['x','y']:
+                new_array[row_edge:,icount_col] = new_array[row_edge-1,icount_col] # fill lower rows with last x or y value
             icol=col_edge
             
         out_dict.update({col_name:new_array.copy()})
